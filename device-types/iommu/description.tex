@@ -1244,3 +1244,183 @@ back to using an older fault report format that fits in the buffer.
 \footnotetext{This would happen for example if the device implements a
 more recent version of this specification, whose fault report contains
 additional fields.}
+
+\subsection{Table formats}\label{sec:Device Types / IOMMU Device / Table Formats}
+
+Supported table formats in PROBE properties and ATTACH_TABLE
+requests are:
+\begin{description}
+  \item[VIRTIO_IOMMU_PST_ARM_SMMU3 (1)] Arm SMMUv3 Context
+    Descriptor Tables.
+  \item[VIRTIO_IOMMU_PGT_ARM64 (2)] Arm VMSAv8-64 page tables.
+\end{description}
+
+\subsubsection{Arm SMMUv3 Context Descriptor table}\label{sec:Device Types / IOMMU Device / Table Formats / Arm SMMUv3 Context Descriptor}
+
+Attach Context Descriptor tables (PASID tables) in the format
+described in the \hyperref[intro:SMMUv3]{Arm System Memory
+Management Unit v3 specification}. The table contains context
+descriptors indexed by PASID, each pointing to a page directory.
+
+\paragraph{PROBE properties for Arm SMMUv3 Context Descriptor tables}\label{sec:Device Types / IOMMU Device / Table Formats / Arm SMMUv3 Context Descriptor / PROBE}
+
+\begin{lstlisting}
+struct virtio_iommu_probe_pst_arm_smmu3 {
+  struct virtio_iommu_probe_property head;
+  le16  format;
+  u8    reserved[2];
+  le64  flags;
+};
+
+#define VIRTIO_IOMMU_PST_ARM_SMMU3_F_BTM    (1ULL << 0)
+\end{lstlisting}
+
+Supported flags are:
+\begin{description}
+  \item[VIRTIO_IOMMU_PST_ARM_SMMU3_F_BTM] Broadcast TLB
+    maintenance is supported. INVALIDATE requests for
+    \field{caches} VIRTIO_IOMMU_INVAL_C_TLB can be replaced by
+    broadcast TLBI instructions. INVALIDATE requests for
+    \field{caches} VIRTIO_IOMMU_INVAL_C_EP_TLB, if the endpoint
+    has PCIe ATS enabled, are still necessary.
+\end{description}
+
+\paragraph{ATTACH_TABLE request for Arm SMMUv3 Context Descriptor tables}\label{sec:Device Types / IOMMU Device / Table Formats / Arm SMMUv3 Context Descriptor / ATTACH_TABLE}
+
+\begin{lstlisting}
+struct virtio_iommu_req_attach_pst_arm_smmu3 {
+  struct virtio_iommu_req_head head;
+  le32  domain;
+  le32  endpoint;
+  le16  format;
+  u8    s1fmt;
+  u8    s1dss;
+  le64  s1contextptr;
+  u8    s1cdmax;
+  u8    reserved[51];
+  struct virtio_iommu_req_tail tail;
+};
+
+/* Stage-1 format */
+#define VIRTIO_IOMMU_PST_ARM_SMMU3_LINEAR     0x0
+#define VIRTIO_IOMMU_PST_ARM_SMMU3_4KL2       0x1
+#define VIRTIO_IOMMU_PST_ARM_SMMU3_64KL2      0x2
+
+/* Stage-1 default substream */
+#define VIRTIO_IOMMU_PST_ARM_SMMU3_DSS_TERM   0x0
+#define VIRTIO_IOMMU_PST_ARM_SMMU3_DSS_BYPASS 0x1
+#define VIRTIO_IOMMU_PST_ARM_SMMU3_DSS_0      0x2
+\end{lstlisting}
+
+\begin{description}
+  \item[\field{s1fmt}] The layout used for the context descriptor
+    table:
+    \begin{description}
+      \item{LINEAR} Single table level,
+      \item{4KL2} Two-level tables with 4KB leaf tables,
+      \item{64KL2} Two-level tables with 64KB leaf tables.
+    \end{description}
+  \item[\field{s1dss}] Default substream (PASID) behavior:
+    \begin{description}
+      \item{DSS_TERM} Transactions without a substream are
+        terminated.
+      \item{DSS_BYPASS} Transactions without a substream bypass
+        translation.
+      \item{DSS_0} Transactions without a substream use entry 0
+        of the table. Substream 0 is invalid.
+    \end{description}
+  \item[\field{s1contextptr}] Address of the context descriptor
+    table, in guest-physical address space.
+  \item[\field{s1cdmax}] Size of the table. $2^\field{s1cdmax}$
+    is the number of context descriptors.
+\end{description}
+
+\drivernormative{\subparagraph}{ATTACH_TABLE request for Arm SMMUv3 Context Descriptor tables}{Device Types / IOMMU Device / Table Formats / Arm SMMUv3 Context Descriptor / ATTACH_TABLE}
+
+\field{s1contextptr} MUST be aligned on 64 bytes.
+
+\field{s1cdmax} MUST be less than or equal to \field{bits_count}
+in the VIRTIO_IOMMU_PROBE_T_PASID_SIZE property.
+
+\subsubsection{Arm 64-bit page tables}\label{sec:Device Types / IOMMU Device / Table Formats / Arm64}
+
+Attach page tables in the Arm VMSAv8-64 format, as described by
+the \hyperref[intro:Armv8-A]{Armv8-A Architecture Reference
+Manual}. The descriptors are little-endian.
+
+\paragraph{PROBE properties for Arm 64-bit page tables}\label{sec:Device Types / IOMMU Device / Table Formats / Arm64 / PROBE}
+
+\begin{lstlisting}
+struct virtio_iommu_probe_pgt_arm64 {
+  struct virtio_iommu_probe_property head;
+  le16  format;
+  u8    reserved[2];
+  le64  flags;
+};
+
+#define VIRTIO_IOMMU_PGT_ARM64_F_ASID16     (1ULL << 1)
+#define VIRTIO_IOMMU_PGT_ARM64_F_HW_ACCESS  (1ULL << 2)
+#define VIRTIO_IOMMU_PGT_ARM64_F_HW_DIRTY   (1ULL << 3)
+\end{lstlisting}
+
+\begin{description}
+  \item[VIRTIO_IOMMU_PGT_ARM64_F_ASID16] ASIDs can be up to 16
+    bits. When unset, ASID are only 8 bits.
+  \item[VIRTIO_IOMMU_PGT_ARM64_F_HW_ACCESS] Hardware management
+    of the access bit. The device can write the access bit in page
+    table entries.
+  \item[VIRTIO_IOMMU_PGT_ARM64_F_HW_DIRTY] Hardware management of
+    the dirty bit. The device can set the dirty bit in page table
+    entries.
+\end{description}
+
+\paragraph{ATTACH_TABLE request for Arm 64-bit page tables}\label{sec:Device Types / IOMMU Device / Table Formats / Arm64 / ATTACH_TABLE}
+
+Attach a single set of page tables to an endpoint.
+
+\begin{lstlisting}
+struct virtio_iommu_req_attach_pgt_arm64 {
+  struct virtio_iommu_req_head head;
+  le32  domain;
+  le32  endpoint;
+  le16  format;
+  u8    reserved[2]
+  le64  tcr;
+  le64  ttbr0;
+  le64  ttbr1;
+  le64  mair;
+  u8    reserved1[32];
+  struct virtio_iommu_req_tail tail;
+};
+\end{lstlisting}
+
+\begin{description}
+  \item[\field{tcr}] Translation Control Registers, corresponding
+    to TCR_EL1 described in the Armv8-A Architecture Reference
+    Manual.
+  \item[\field{ttbr0}] Translation Table Base Register
+    corresponding to TTBR0_EL1.
+  \item[\field{ttbr1}] Translation Table Base Register
+    corresponding to TTBR1_EL1.
+  \item[\field{mair}] Memory Attribute Index Register
+    corresponding to MAIR_EL1.
+\end{description}
+
+\drivernormative{\subparagraph}{ATTACH_TABLE request for Arm 64-bit page tables}{Device Types / IOMMU Device / Table Formats / Arm64 / ATTACH_TABLE}
+
+The driver SHOULD set fields \field{reserved} and
+\field{reserved1} to zero.
+
+If the endpoint supports a Context Descriptor table format, the
+driver SHOULD NOT send an ATTACH_TABLE request with Arm 64-bit
+tables. It SHOULD instead attach a Context Descriptor table.
+
+\devicenormative{\subparagraph}{ATTACH_TABLE request for Arm 64-bit page tables}{Device Types / IOMMU Device / Table Formats / Arm64 / ATTACH_TABLE}
+
+The device MUST ignore fields \field{reserved} and
+\field{reserved1}.
+
+\paragraph{INVALIDATE request for Arm 64-bit page tables}\label{sec:Device Types / IOMMU Device / Table Formats / Arm64 / INVALIDATE}
+
+Bits [15:0] of \field{id} in an INVALIDATE request correspond to
+the address space ID (ASID) of the page directory.
