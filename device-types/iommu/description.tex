@@ -939,7 +939,12 @@ it SHOULD fill the remaining bytes of \field{properties} with zeroes.
 \subsubsection{PROBE properties}\label{sec:Device Types / IOMMU Device / Device operations / PROBE properties}
 
 \begin{lstlisting}
-#define VIRTIO_IOMMU_PROBE_T_RESV_MEM   1
+#define VIRTIO_IOMMU_PROBE_T_RESV_MEM       1
+#define VIRTIO_IOMMU_PROBE_T_PAGE_SIZE_MASK 2
+#define VIRTIO_IOMMU_PROBE_T_INPUT_RANGE    3
+#define VIRTIO_IOMMU_PROBE_T_OUTPUT_SIZE    4
+#define VIRTIO_IOMMU_PROBE_T_PASID_SIZE     5
+#define VIRTIO_IOMMU_PROBE_T_TABLE_FORMAT   6
 \end{lstlisting}
 
 \paragraph{Property RESV_MEM}\label{sec:Device Types / IOMMU Device / Device operations / PROBE properties / RESVMEM}
@@ -1001,6 +1006,158 @@ The device SHOULD reject a MAP request that overlaps a RESV_MEM region.
 
 The device SHOULD NOT allow accesses from the endpoint to RESV_MEM regions
 to affect any other component than the endpoint and the driver.
+
+
+\paragraph{Property PAGE_SIZE_MASK}\label{sec:Device Types / IOMMU Device / Device operations / PROBE properties / PAGE_SIZE_MASK}
+
+\begin{lstlisting}
+struct virtio_iommu_probe_page_size_mask {
+  struct virtio_iommu_probe_property head;
+  u8    reserved[4];
+  le64  page_size_mask;
+};
+\end{lstlisting}
+
+The PAGE_SIZE_MASK property overrides the global
+\field{page_size_mask} configuration for an endpoint.
+
+The \field{page_size_mask} field behaves in the same way as the
+global \field{page_size_mask} field, described in \ref{sec:Device
+Types / IOMMU Device / Device operations}. The least significant
+bit describes the mapping granularity, while additional bits are
+hints.
+
+\drivernormative{\subparagraph}{Property PAGE_SIZE_MASK}{Device Types / IOMMU Device / Device operations / PROBE properties / PAGE_SIZE_MASK}
+
+The driver MUST ignore \field{reserved}.
+
+\devicenormative{\subparagraph}{Property PAGE_SIZE_MASK}{Device Types / IOMMU Device / Device operations / PROBE properties / PAGE_SIZE_MASK}
+
+The device SHOULD set \field{reserved} to zero.
+
+The device MAY present multiple PAGE_SIZE_MASK property per
+endpoint.
+
+
+\paragraph{Property INPUT_RANGE}\label{sec:Device Types / IOMMU Device / Device operations / PROBE properties / INPUT_RANGE}
+
+\begin{lstlisting}
+struct virtio_iommu_probe_input_range {
+  struct virtio_iommu_probe_property head;
+  u8    reserved[4];
+  le64  start;
+  le64  end;
+};
+\end{lstlisting}
+
+The INPUT_RANGE property overrides the global \field{input_range}
+configuration for an endpoint.
+
+Fields \field{start} and \field{end} behave in the same way as
+the global \field{input_range.start} and \field{input_range.end}
+fields, described in \ref{sec:Device Types / IOMMU Device /
+Device operations}.
+
+\drivernormative{\subparagraph}{Property INPUT_RANGE}{Device Types / IOMMU Device / Device operations / PROBE properties / INPUT_RANGE}
+
+The driver MUST ignore \field{reserved}.
+
+\devicenormative{\subparagraph}{Property INPUT_RANGE}{Device Types / IOMMU Device / Device operations / PROBE properties / INPUT_RANGE}
+
+The device SHOULD set \field{reserved} to zero.
+
+The device SHOULD NOT present more than one INPUT_RANGE property
+per endpoint.
+
+The device MAY present an INPUT_RANGE property even if it does
+not offer the VIRTIO_IOMMU_F_INPUT_RANGE feature.
+
+
+\paragraph{Property OUTPUT_SIZE}\label{sec:Device Types / IOMMU Device / Device operations / PROBE properties / OUTPUT_SIZE}
+
+\begin{lstlisting}
+struct virtio_iommu_probe_output_size {
+  struct virtio_iommu_probe_property head;
+  u8	bits_count;
+  u8	reserved[3];
+};
+\end{lstlisting}
+
+The OUTPUT_SIZE property describes the maximum guest-physical
+address that the device supports for this endpoint.
+\field{bits_count} is the number of bits that an address can use.
+
+\drivernormative{\subparagraph}{Property OUTPUT_SIZE}{Device Types / IOMMU Device / Device operations / PROBE properties / OUTPUT_SIZE}
+
+The driver MUST ignore \field{reserved}.
+
+The driver SHOULD NOT use guest-physical addresses larger than
+the size defined by \field{bits_count} in a MAP request or in a
+page table.
+
+\devicenormative{\subparagraph}{Property OUTPUT_SIZE}{Device Types / IOMMU Device / Device operations / PROBE properties / OUTPUT_SIZE}
+
+The device SHOULD set \field{reserved} to zero.
+
+The device SHOULD NOT present more than one OUTPUT_SIZE property
+per endpoint.
+
+
+\paragraph{Property PASID_SIZE}\label{sec:Device Types / IOMMU Device / Device operations / PROBE properties / PASID_SIZE}
+
+\begin{lstlisting}
+struct virtio_iommu_probe_pasid_size {
+  struct virtio_iommu_probe_property head;
+  u8  bits_count;
+  u8  reserved[3];
+};
+\end{lstlisting}
+
+The PASID_SIZE property describes the maximum PASID that the
+device supports for this endpoint. \field{bits_count} is the
+number of PASID bits that the device can receive in a DMA
+transaction from this endpoint. This property is conflated with
+the endpoint PASID size, obtained through a platform specific
+mechanism such as a PCIe PASID capability.
+
+\drivernormative{\subparagraph}{Property PASID_SIZE}{Device Types / IOMMU Device / Device operations / PROBE properties / PASID_SIZE}
+
+The driver MUST ignore \field{reserved}.
+
+The driver SHOULD NOT use PASIDs larger than the size defined by
+\field{bits_count} when updating a PASID table, or in an
+INVALIDATE request.
+
+\devicenormative{\subparagraph}{Property PASID_SIZE}{Device Types / IOMMU Device / Device operations / PROBE properties / PASID_SIZE}
+
+The device SHOULD set \field{reserved} to zero.
+
+The device SHOULD NOT present more than one PASID_SIZE property
+per endpoint.
+
+
+\paragraph{Property TABLE_FORMAT}\label{sec:Device Types / IOMMU Device / Device operations / PROBE properties / TABLE_FORMAT}
+
+\begin{lstlisting}
+struct virtio_iommu_probe_table_format {
+  struct virtio_iommu_probe_property head;
+  le16  format;
+
+  /* Format-specific fields follow */
+};
+\end{lstlisting}
+
+The TABLE_FORMAT property describes a page table or PASID table
+format that the device supports for this endpoint. The format is
+used in ATTACH_TABLE requests. Formats are described in section
+\ref{sec:Device Types / IOMMU Device / Table Formats}.
+
+\devicenormative{\subparagraph}{Property TABLE_FORMAT}{Device Types / IOMMU Device / Device operations / PROBE properties / TABLE_FORMAT}
+
+The device MAY present more than one TABLE_FORMAT property. If
+the device presents a PASID table format, it SHOULD also present
+a compatible page table format.
+
 
 \subsubsection{Fault reporting}\label{sev:Device Types / IOMMU Device / Device operations / Fault reporting}
 
