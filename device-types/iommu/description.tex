@@ -1253,6 +1253,7 @@ requests are:
   \item[VIRTIO_IOMMU_PST_ARM_SMMU3 (1)] Arm SMMUv3 Context
     Descriptor Tables.
   \item[VIRTIO_IOMMU_PGT_ARM64 (2)] Arm VMSAv8-64 page tables.
+  \item[VIRTIO_IOMMU_PGT_VTD (3)] VT-d page table.
 \end{description}
 
 \subsubsection{Arm SMMUv3 Context Descriptor table}\label{sec:Device Types / IOMMU Device / Table Formats / Arm SMMUv3 Context Descriptor}
@@ -1424,3 +1425,73 @@ The device MUST ignore fields \field{reserved} and
 
 Bits [15:0] of \field{id} in an INVALIDATE request correspond to
 the address space ID (ASID) of the page directory.
+
+\subsubsection{VT-d page table}\label{sec:Device Types / IOMMU Device / Table Formats / VT-d}
+Attach page table in the VT-d format, as described by the \hyperref[intro:VT-Directed-IO]
+{Intel Virtualization Technology for Directed I/O}. The descriptors
+are little-endian.
+
+\paragraph{PROBE property for VT-d page tables}\label{sec:Device Types / IOMMU Device / Table Formats / VT-d / PROBE}
+
+\begin{lstlisting}
+struct virtio_iommu_probe_pgt_vtd {
+  struct virtio_iommu_probe_property    head;
+  le16                                  format;
+  u8                                    reserved[2];
+  le64                                  cap_reg;
+  le64                                  ecap_reg;
+};
+\end{lstlisting}
+
+\begin{description}
+  \item[\field{cap_reg}] Capability Register, corresponding to
+    Capability Register described in the Intel Virtualization
+    Technology for Directed I/O Architecture Specification.
+  \item[\field{ecap_reg}] Extended Capability Register,
+    corresponding to Extended Capability Register described in
+    the Intel Virtualization Technology for Directed I/O
+    Architecture Specification.
+\end{description}
+
+\paragraph{ATTACH_TABLE request for VT-d page table}\label{sec:Device Types / IOMMU Device / Table Formats / VT-d / ATTACH_TABLE}
+
+Attach a single set of page tables to an endpoint.
+
+\begin{lstlisting}
+/* Vt-d I/O Page Table Descriptor */
+struct virtio_iommu_req_attach_pgt_vtd {
+  struct virtio_iommu_req_head          head;
+  le32                                  domain;
+  le32                                  endpoint;
+  le32                                  flags;
+  le16                                  format;
+  u8                                    reserved[2];
+  le32                                  pasid;
+  le64                                  pgtbl_addr;
+  le64                                  pgtbl_flags;
+  le32                                  addr_width;
+  u8                                    reserved2[36];
+  struct virtio_iommu_req_tail          tail;
+};
+
+/* Intel VT-d stage-1 page table entry attributes */
+#define	IOMMU_VTD_PGTBL_SRE             0x01
+#define	IOMMU_VTD_PGTBL_EAFE            0x02
+#define	IOMMU_VTD_PGTBL_WPE             0x40
+#define	IOMMU_VTD_PGTBL_LAST            0x80
+\end{lstlisting}
+
+\begin{description}
+  \item[\field{pasid}] Process Address Space Identifier
+  \item[\field{pgtbl_addr}] Stage-1 page table base address
+  \item[\field{pgtbl_flags}] Stage-1 page table entry attributes
+    \begin{description}
+      \item{SRE} Supervisor request,
+      \item{EAFE} Extended access enable,
+      \item{WPE} Write protect enable.
+    \end{description}
+  \item[\field{pat}] Page attribute table data to compute
+    effective memory type.
+  \item[\field{addr_width}] The address width of the untranslated
+    addresses that are subjected to the stage-1 page table.
+\end{description}
